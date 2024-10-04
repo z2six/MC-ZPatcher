@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.3'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.8.9'
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    manifest {
+        attributes(
+                'Main-Class': 'net.z26.ModLister'
+        )
+    }
+}
+
+tasks.build.dependsOn shadowJar
