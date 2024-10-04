@@ -83,6 +83,9 @@ public class ModLister {
                         modInfo.addProperty("enabled", isEnabled);  // Store enabled status
                         modInfo.addProperty("modloader", "Fabric");  // Assuming all mods are Fabric for now
 
+                        // Add the absolute file path
+                        modInfo.addProperty("file_path", modFile.getAbsolutePath());
+
                         modInfoList.add(modInfo);
                     }
                 } catch (Exception e) {

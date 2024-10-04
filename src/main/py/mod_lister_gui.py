@@ -100,13 +100,11 @@ class ModDependencyListerApp:
         self.main_frame.grid_rowconfigure(0, weight=1)
         self.main_frame.grid_columnconfigure(0, weight=1)
 
-        # Bind mod selection events (mouse click and arrow keys)
+        # Bind mod selection events (mouse release for selection)
         self.tree.bind("<ButtonRelease-1>", self.on_mod_select)
-        self.tree.bind("<KeyRelease-Up>", self.on_mod_select)
-        self.tree.bind("<KeyRelease-Down>", self.on_mod_select)
 
-        # Bind checkboxes to click events
-        self.tree.bind("<Double-1>", self.on_double_click)
+        # Bind checkboxes to click events (mouse press for checkbox)
+        self.tree.bind("<Button-1>", self.on_checkbox_click)
 
     def select_folder(self):
         # Get the folder path from file dialog
@@ -131,7 +129,7 @@ class ModDependencyListerApp:
             # Run the Java process with the dynamically determined JAR path
             try:
                 # Capture stdout and stderr from the Java process and print it to the Python console
-                result = subprocess.run(['java', '-jar', jar_path, folder_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                result = subprocess.run(['java', '--enable-preview', '-jar', jar_path, folder_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
                 # Print the output from the Java process
                 print(result.stdout)  # Print standard output (includes our custom messages)
@@ -169,9 +167,21 @@ class ModDependencyListerApp:
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON data: {e}")
 
+    def display_placeholder_icon(self):
+        """Displays a green placeholder box if no icon is found"""
+        green_box = Image.new("RGB", (128, 128), color="green")
+        green_tk = ImageTk.PhotoImage(green_box)
+        self.icon_label.config(image=green_tk)
+        self.icon_label.image = green_tk
+
     def on_mod_select(self, event):
-        if not self.tree.selection():
-            return  # Prevent errors if nothing is selected
+        """Handles mod selection to display details when a mod is selected"""
+        region = self.tree.identify("region", event.x, event.y)
+        column = self.tree.identify_column(event.x)
+
+        # Ignore the click if it's within the checkbox column
+        if column == "#1":
+            return
 
         selected_item = self.tree.selection()[0]
         values = self.tree.item(selected_item, "values")
@@ -189,9 +199,9 @@ class ModDependencyListerApp:
             self.authors_label.config(text=f"Authors: {selected_mod_data.get('authors', 'Unknown')}")
             self.contact_label.config(text=f"Contact: {selected_mod_data.get('contact', 'Unknown')}")
 
-            # Load the mod icon if available
-            icon_path = f"mod_temp_data/icons/{mod_id}.png"
-            if os.path.exists(icon_path):
+            # Load the mod icon if available from the icon_path in JSON
+            icon_path = selected_mod_data.get('icon_path', None)
+            if icon_path and os.path.exists(icon_path):
                 icon_image = Image.open(icon_path).resize((128, 128))
                 icon_tk = ImageTk.PhotoImage(icon_image)
                 self.icon_label.config(image=icon_tk)
@@ -201,40 +211,65 @@ class ModDependencyListerApp:
         else:
             print(f"Mod ID {mod_id} not found in JSON data")
 
-    def display_placeholder_icon(self):
-        green_box = Image.new("RGB", (128, 128), color="green")
-        green_tk = ImageTk.PhotoImage(green_box)
-        self.icon_label.config(image=green_tk)
-        self.icon_label.image = green_tk
+    def on_checkbox_click(self, event):
+        """Handles checkbox clicks (Enable/Disable)"""
+        region = self.tree.identify("region", event.x, event.y)
+        column = self.tree.identify_column(event.x)
 
-    def on_double_click(self, event):
-        # This handles toggling mod enable/disable when double-clicking the checkbox
-        item = self.tree.selection()[0]
-        self.toggle_mod(item)
+        if region == "cell" and column == "#1":  # Only react to clicks in the checkbox column
+            item = self.tree.identify_row(event.y)
+            if item:
+                print(f"Checkbox clicked for item {item}")  # Debugging output
+                self.toggle_mod(item)
 
     def toggle_mod(self, item):
+        # Fetch current values from the selected mod row
         values = self.tree.item(item, "values")
         mod_id = values[1]
-        enabled = values[0] == "☑"
+        selected_mod_data = next((mod for mod in self.mod_info if mod.get('mod_id') == mod_id), None)
 
-        folder_path = self.selected_folder  # Use the globally stored selected folder path
-        if folder_path:
-            # Find the mod file and toggle between .jar and .jar.disabled
-            mod_file = None
-            for file in os.listdir(folder_path):
-                if mod_id in file:
-                    mod_file = os.path.join(folder_path, file)
-                    break
+        if selected_mod_data:
+            mod_file = selected_mod_data.get('file_path')  # Get the stored file path
+            enabled = selected_mod_data.get('enabled')  # Check if currently enabled
 
             if mod_file:
-                if enabled:
-                    # Disable the mod by renaming to .jar.disabled
-                    os.rename(mod_file, mod_file + ".disabled")
-                    self.tree.set(item, "Enabled", "☐")
-                else:
-                    # Enable the mod by renaming to .jar
-                    os.rename(mod_file, mod_file.replace(".disabled", ""))
-                    self.tree.set(item, "Enabled", "☑")
+                try:
+                    # Rename the file to enable or disable the mod
+                    if enabled:
+                        # Disable the mod by renaming to .jar.disabled
+                        new_mod_file = mod_file + ".disabled"
+                        os.rename(mod_file, new_mod_file)
+                        print(f"Mod disabled: {new_mod_file}")
+                        self.tree.set(item, "Enabled", "☐")  # Update checkbox status to unchecked
+                    else:
+                        # Enable the mod by renaming it back to .jar
+                        new_mod_file = mod_file.replace(".disabled", "")
+                        os.rename(mod_file, new_mod_file)
+                        print(f"Mod enabled: {new_mod_file}")
+                        self.tree.set(item, "Enabled", "☑")  # Update checkbox status to checked
+
+                    # Ensure mod paths and details are updated
+                    self.update_mod_path(mod_id, new_mod_file)
+
+                except Exception as e:
+                    print(f"Error renaming mod file: {e}")
+
+    def update_mod_path(self, mod_id, new_mod_file):
+        """ Update the mod path in the loaded mod info after renaming the file. """
+        selected_mod_data = next((mod for mod in self.mod_info if mod.get('mod_id') == mod_id), None)
+        if selected_mod_data:
+            # Update file path and enabled status
+            selected_mod_data['file_path'] = new_mod_file
+            selected_mod_data['enabled'] = not new_mod_file.endswith(".disabled")
+
+            # Check and update the icon path if necessary
+            if selected_mod_data.get('icon_path'):
+                new_icon_path = f"{new_mod_file}.png"
+                selected_mod_data['icon_path'] = new_icon_path
+
+            # Reload the details panel with updated mod information
+            print(f"Mod path updated for: {mod_id}")
+            self.on_mod_select(None)  # Refresh the details panel
 
 if __name__ == "__main__":
     root = tk.Tk()
