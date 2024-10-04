@@ -1,9 +1,10 @@
 import tkinter as tk
-from tkinter import filedialog, ttk, Scrollbar
+from tkinter import filedialog, ttk, Scrollbar, Menu
 from PIL import Image, ImageTk
 import os
 import subprocess
 import json
+import shutil
 
 class ModDependencyListerApp:
     def __init__(self, root):
@@ -11,21 +12,30 @@ class ModDependencyListerApp:
         self.root.title("MC ZPatcher")
         self.selected_folder = None  # Store the folder path
 
+        # Add menu bar
+        self.menu_bar = Menu(self.root)
+        self.root.config(menu=self.menu_bar)
+
+        # Add "File" and "View" menu
+        file_menu = Menu(self.menu_bar, tearoff=0)
+        file_menu.add_command(label="Open Mods Folder", command=self.select_folder)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.on_exit)
+        self.menu_bar.add_cascade(label="File", menu=file_menu)
+
+        view_menu = Menu(self.menu_bar, tearoff=0)
+        self.menu_bar.add_cascade(label="View", menu=view_menu)
+
         # Top section - full width, contains only the "Select Folder" button
         self.top_frame = tk.Frame(self.root)
         self.top_frame.pack(fill="x", padx=10, pady=10)
 
-        self.select_folder_btn = tk.Button(self.top_frame, text="Select Mod Folder", command=self.select_folder)
-        self.select_folder_btn.pack()
-
         # Main section - mod list section and mod detail section side by side
-        self.main_frame = tk.Frame(self.root)
+        self.main_frame = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Mod List Section (left)
         self.mod_list_frame = tk.Frame(self.main_frame)
-        self.mod_list_frame.grid(row=0, column=0, sticky="nsew")
-
         self.tree = ttk.Treeview(self.mod_list_frame, columns=("Enabled", "Mod ID", "Mod Name", "Modloader", "Version"), show="headings")
         self.tree.heading("Enabled", text="Enabled")
         self.tree.heading("Mod ID", text="Mod ID")
@@ -51,13 +61,16 @@ class ModDependencyListerApp:
         self.mod_list_frame.grid_rowconfigure(0, weight=1)
         self.mod_list_frame.grid_columnconfigure(0, weight=1)
 
+        self.main_frame.add(self.mod_list_frame)
+
+        # Add the resizable separator (three vertical dots)
+        self.separator = ttk.Separator(self.main_frame, orient="vertical")
+        self.main_frame.add(self.separator, before=self.mod_list_frame)
+
         # Mod Detail Section (right)
         self.mod_detail_frame = tk.Frame(self.main_frame, relief="sunken", borderwidth=2, width=350)
-        self.mod_detail_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-
-        # Ensure mod details section has a fixed width of 350px (min and max)
-        self.main_frame.grid_columnconfigure(1, minsize=350, weight=0)
-        self.mod_detail_frame.grid_propagate(False)
+        self.mod_detail_frame.grid_rowconfigure(0, weight=1)
+        self.mod_detail_frame.grid_columnconfigure(0, weight=1)
 
         # Mod detail widgets
         self.icon_label = tk.Label(self.mod_detail_frame)
@@ -96,15 +109,16 @@ class ModDependencyListerApp:
         self.contact_label = tk.Label(self.mod_detail_frame, text="Contact:", wraplength=350, justify="left")
         self.contact_label.grid(row=15, column=0, sticky="w")
 
-        # Configure resizing behavior for mod list and mod details
-        self.main_frame.grid_rowconfigure(0, weight=1)
-        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.add(self.mod_detail_frame)
 
         # Bind mod selection events (mouse release for selection)
         self.tree.bind("<ButtonRelease-1>", self.on_mod_select)
 
         # Bind checkboxes to click events (mouse press for checkbox)
         self.tree.bind("<Button-1>", self.on_checkbox_click)
+
+        # Handle application closing to clean up
+        self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def select_folder(self):
         # Get the folder path from file dialog
@@ -115,6 +129,10 @@ class ModDependencyListerApp:
             # Clear the table before populating it with new data
             for row in self.tree.get_children():
                 self.tree.delete(row)
+
+            # Clear mod_temp_data folder if exists
+            if os.path.exists("mod_temp_data"):
+                shutil.rmtree("mod_temp_data")
 
             # Dynamically construct the path to the JAR file relative to the current Python script
             current_script_path = os.path.dirname(os.path.abspath(__file__))  # Path to the current Python script
@@ -270,6 +288,12 @@ class ModDependencyListerApp:
             # Reload the details panel with updated mod information
             print(f"Mod path updated for: {mod_id}")
             self.on_mod_select(None)  # Refresh the details panel
+
+    def on_exit(self):
+        """Handle application exit by cleaning up the mod_temp_data folder"""
+        if os.path.exists("mod_temp_data"):
+            shutil.rmtree("mod_temp_data")
+        self.root.quit()
 
 if __name__ == "__main__":
     root = tk.Tk()
