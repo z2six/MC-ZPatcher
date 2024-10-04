@@ -5,6 +5,7 @@ import os
 import subprocess
 import json
 import shutil
+from ModDetailPanel import ModDetailPanel  # Import the isolated ModDetailPanel class
 
 class ModDependencyListerApp:
     def __init__(self, root):
@@ -25,10 +26,6 @@ class ModDependencyListerApp:
 
         view_menu = Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="View", menu=view_menu)
-
-        # Top section - full width, contains only the "Select Folder" button
-        self.top_frame = tk.Frame(self.root)
-        self.top_frame.pack(fill="x", padx=10, pady=10)
 
         # Main section - mod list section and mod detail section side by side
         self.main_frame = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
@@ -60,56 +57,15 @@ class ModDependencyListerApp:
         # Allow dynamic resizing of the mod list
         self.mod_list_frame.grid_rowconfigure(0, weight=1)
         self.mod_list_frame.grid_columnconfigure(0, weight=1)
-
         self.main_frame.add(self.mod_list_frame)
 
-        # Add the resizable separator (three vertical dots)
+        # Separator for resizable layout (3 vertical dots)
         self.separator = ttk.Separator(self.main_frame, orient="vertical")
-        self.main_frame.add(self.separator, before=self.mod_list_frame)
+        self.main_frame.add(self.separator)
 
-        # Mod Detail Section (right)
-        self.mod_detail_frame = tk.Frame(self.main_frame, relief="sunken", borderwidth=2, width=350)
-        self.mod_detail_frame.grid_rowconfigure(0, weight=1)
-        self.mod_detail_frame.grid_columnconfigure(0, weight=1)
-
-        # Mod detail widgets
-        self.icon_label = tk.Label(self.mod_detail_frame)
-        self.icon_label.grid(row=0, column=0, rowspan=5, padx=10, pady=10)
-
-        # General section
-        self.separator_general = tk.Label(self.mod_detail_frame, text="----- General -----", fg="blue")
-        self.separator_general.grid(row=6, column=0, sticky="w")
-
-        self.mod_id_label = tk.Label(self.mod_detail_frame, text="Mod ID:", wraplength=350, justify="left")
-        self.mod_id_label.grid(row=7, column=0, sticky="w")
-
-        self.mod_name_label = tk.Label(self.mod_detail_frame, text="Mod Name:", wraplength=350, justify="left")
-        self.mod_name_label.grid(row=8, column=0, sticky="w")
-
-        self.mod_version_label = tk.Label(self.mod_detail_frame, text="Version:", wraplength=350, justify="left")
-        self.mod_version_label.grid(row=9, column=0, sticky="w")
-
-        self.description_label = tk.Label(self.mod_detail_frame, text="Description:", wraplength=350, justify="left")
-        self.description_label.grid(row=10, column=0, sticky="w")
-
-        # Compatibility section
-        self.separator1 = tk.Label(self.mod_detail_frame, text="----- Compatibility -----", fg="blue")
-        self.separator1.grid(row=11, column=0, sticky="w")
-
-        self.compatibility_label = tk.Label(self.mod_detail_frame, text="Compatibility:", wraplength=350, justify="left")
-        self.compatibility_label.grid(row=12, column=0, sticky="w")
-
-        # Information section
-        self.separator2 = tk.Label(self.mod_detail_frame, text="----- Information -----", fg="blue")
-        self.separator2.grid(row=13, column=0, sticky="w")
-
-        self.authors_label = tk.Label(self.mod_detail_frame, text="Authors:", wraplength=350, justify="left")
-        self.authors_label.grid(row=14, column=0, sticky="w")
-
-        self.contact_label = tk.Label(self.mod_detail_frame, text="Contact:", wraplength=350, justify="left")
-        self.contact_label.grid(row=15, column=0, sticky="w")
-
-        self.main_frame.add(self.mod_detail_frame)
+        # Create Mod Detail Panel
+        self.mod_detail_panel = ModDetailPanel(self.main_frame)
+        self.main_frame.add(self.mod_detail_panel.mod_detail_frame)
 
         # Bind mod selection events (mouse release for selection)
         self.tree.bind("<ButtonRelease-1>", self.on_mod_select)
@@ -185,22 +141,8 @@ class ModDependencyListerApp:
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON data: {e}")
 
-    def display_placeholder_icon(self):
-        """Displays a green placeholder box if no icon is found"""
-        green_box = Image.new("RGB", (128, 128), color="green")
-        green_tk = ImageTk.PhotoImage(green_box)
-        self.icon_label.config(image=green_tk)
-        self.icon_label.image = green_tk
-
     def on_mod_select(self, event):
         """Handles mod selection to display details when a mod is selected"""
-        region = self.tree.identify("region", event.x, event.y)
-        column = self.tree.identify_column(event.x)
-
-        # Ignore the click if it's within the checkbox column
-        if column == "#1":
-            return
-
         selected_item = self.tree.selection()[0]
         values = self.tree.item(selected_item, "values")
         mod_id = values[1]
@@ -208,36 +150,17 @@ class ModDependencyListerApp:
         # Find the mod details in the loaded JSON data
         selected_mod_data = next((mod for mod in self.mod_info if mod.get('mod_id') == mod_id), None)
         if selected_mod_data:
-            # Update the detail panel with the mod information
-            self.mod_id_label.config(text=f"Mod ID: {selected_mod_data.get('mod_id', 'Unknown')}")
-            self.mod_name_label.config(text=f"Mod Name: {selected_mod_data.get('mod_name', 'Unknown')}")
-            self.mod_version_label.config(text=f"Version: {selected_mod_data.get('version', 'Unknown')}")
-            self.description_label.config(text=f"Description: {selected_mod_data.get('description', 'No description available')}")
-            self.compatibility_label.config(text=f"Compatibility: {selected_mod_data.get('compatibility', 'Unknown')}")
-            self.authors_label.config(text=f"Authors: {selected_mod_data.get('authors', 'Unknown')}")
-            self.contact_label.config(text=f"Contact: {selected_mod_data.get('contact', 'Unknown')}")
-
-            # Load the mod icon if available from the icon_path in JSON
-            icon_path = selected_mod_data.get('icon_path', None)
-            if icon_path and os.path.exists(icon_path):
-                icon_image = Image.open(icon_path).resize((128, 128))
-                icon_tk = ImageTk.PhotoImage(icon_image)
-                self.icon_label.config(image=icon_tk)
-                self.icon_label.image = icon_tk
-            else:
-                self.display_placeholder_icon()
-        else:
-            print(f"Mod ID {mod_id} not found in JSON data")
+            # Update the mod detail panel
+            self.mod_detail_panel.update_mod_details(selected_mod_data)
 
     def on_checkbox_click(self, event):
-        """Handles checkbox clicks (Enable/Disable)"""
+        """Handles checkbox clicks for enabling/disabling mods"""
         region = self.tree.identify("region", event.x, event.y)
         column = self.tree.identify_column(event.x)
 
         if region == "cell" and column == "#1":  # Only react to clicks in the checkbox column
             item = self.tree.identify_row(event.y)
             if item:
-                print(f"Checkbox clicked for item {item}")  # Debugging output
                 self.toggle_mod(item)
 
     def toggle_mod(self, item):
@@ -254,17 +177,13 @@ class ModDependencyListerApp:
                 try:
                     # Rename the file to enable or disable the mod
                     if enabled:
-                        # Disable the mod by renaming to .jar.disabled
                         new_mod_file = mod_file + ".disabled"
                         os.rename(mod_file, new_mod_file)
-                        print(f"Mod disabled: {new_mod_file}")
-                        self.tree.set(item, "Enabled", "☐")  # Update checkbox status to unchecked
+                        self.tree.set(item, "Enabled", "☐")  # Update checkbox status
                     else:
-                        # Enable the mod by renaming it back to .jar
                         new_mod_file = mod_file.replace(".disabled", "")
                         os.rename(mod_file, new_mod_file)
-                        print(f"Mod enabled: {new_mod_file}")
-                        self.tree.set(item, "Enabled", "☑")  # Update checkbox status to checked
+                        self.tree.set(item, "Enabled", "☑")
 
                     # Ensure mod paths and details are updated
                     self.update_mod_path(mod_id, new_mod_file)
@@ -273,20 +192,11 @@ class ModDependencyListerApp:
                     print(f"Error renaming mod file: {e}")
 
     def update_mod_path(self, mod_id, new_mod_file):
-        """ Update the mod path in the loaded mod info after renaming the file. """
+        """Update the mod path in the loaded mod info after renaming the file"""
         selected_mod_data = next((mod for mod in self.mod_info if mod.get('mod_id') == mod_id), None)
         if selected_mod_data:
-            # Update file path and enabled status
             selected_mod_data['file_path'] = new_mod_file
             selected_mod_data['enabled'] = not new_mod_file.endswith(".disabled")
-
-            # Check and update the icon path if necessary
-            if selected_mod_data.get('icon_path'):
-                new_icon_path = f"{new_mod_file}.png"
-                selected_mod_data['icon_path'] = new_icon_path
-
-            # Reload the details panel with updated mod information
-            print(f"Mod path updated for: {mod_id}")
             self.on_mod_select(None)  # Refresh the details panel
 
     def on_exit(self):
@@ -298,5 +208,5 @@ class ModDependencyListerApp:
 if __name__ == "__main__":
     root = tk.Tk()
     app = ModDependencyListerApp(root)
-    root.geometry("1200x800")  # Wider window to accommodate mod details panel
+    root.geometry("1200x800")
     root.mainloop()
