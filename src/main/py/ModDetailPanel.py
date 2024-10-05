@@ -1,3 +1,4 @@
+# ModDetailPanel.py
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
@@ -12,7 +13,7 @@ class ModDetailPanel:
 
         # Scrollable area setup
         self.scroll_frame = tk.Frame(self.parent)
-        self.canvas = tk.Canvas(self.scroll_frame, bg="lightgray")
+        self.canvas = tk.Canvas(self.scroll_frame, bg="white")
         self.scrollbar = ttk.Scrollbar(self.scroll_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_content = ttk.Frame(self.canvas)
         self.scroll_content.bind("<Configure>", self.on_resize)
@@ -27,7 +28,7 @@ class ModDetailPanel:
         self.sections = {}
 
         # Create and position the icon label in the first row (centered horizontally)
-        self.icon_label = tk.Label(self.scroll_content, bg="lightgray")
+        self.icon_label = tk.Label(self.scroll_content, bg="white")
         self.icon_label.grid(row=0, column=0, padx=10, pady=(10, 0), columnspan=2)
 
         # Create the different sections with proper grid placement
@@ -43,24 +44,22 @@ class ModDetailPanel:
 
         # Bind mouse scroll events to the canvas
         self.canvas.bind_all("<MouseWheel>", self.on_mouse_wheel)
-        self.canvas.bind("<Button-2>", self.on_middle_click_scroll)
-        self.canvas.bind("<B2-Motion>", self.on_middle_drag_scroll)
 
     def create_category_header(self, title, parent_frame, row, default_open=True):
         """Creates an underlined category label with an arrow and toggle functionality."""
-        header_frame = tk.Frame(parent_frame, bg="lightgray")
+        header_frame = tk.Frame(parent_frame, bg="white")
         header_frame.grid(row=row, column=0, sticky="ew", pady=5, columnspan=2)
 
         # Arrow label that will point up or down depending on section state
-        arrow_label = tk.Label(header_frame, text="▼" if default_open else "▲", font=("Arial", 12), bg="lightgray")
+        arrow_label = tk.Label(header_frame, text="▼" if default_open else "▲", font=("Arial", 12), bg="white")
         arrow_label.grid(row=0, column=0, padx=5)
 
         # Category label (underlined)
-        category_label = tk.Label(header_frame, text=title, font=("Arial", 12, "underline"), cursor="hand2", bg="lightgray")
+        category_label = tk.Label(header_frame, text=title, font=("Arial", 12, "underline"), cursor="hand2", bg="white")
         category_label.grid(row=0, column=1, sticky="w")
 
         # Create the section frame (content to show/hide)
-        section_frame = tk.Frame(parent_frame, bg="lightgray")
+        section_frame = tk.Frame(parent_frame, bg="white")
         section_frame.grid(row=row + 1, column=0, sticky="nsew", padx=10, pady=5, columnspan=2)
         section_frame.grid_columnconfigure(0, weight=1)  # Ensure the section frame stretches horizontally
 
@@ -234,11 +233,11 @@ class ModDetailPanel:
     def create_clickable_label(self, frame, label_text, url, row):
         """Creates a clickable link label for the provided URL."""
         # Label for the field name
-        label = tk.Label(frame, text=f"{label_text}:", anchor="w", justify="left", bg="lightgray", font=("Arial", 10, "bold"))
+        label = tk.Label(frame, text=f"{label_text}:", anchor="w", justify="left", bg="white", font=("Arial", 10, "bold"))
         label.grid(row=row, column=0, sticky="w", pady=2)
 
         # Clickable link label
-        link_label = tk.Label(frame, text=url, anchor="w", justify="left", fg="blue", cursor="hand2", bg="lightgray", wraplength=self.get_wraplength())
+        link_label = tk.Label(frame, text=url, anchor="w", justify="left", fg="blue", cursor="hand2", bg="white", wraplength=self.get_wraplength())
         link_label.grid(row=row + 1, column=0, sticky="w", padx=10)
         link_label.bind("<Button-1>", lambda e: webbrowser.open(url))
 
