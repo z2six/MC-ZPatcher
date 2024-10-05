@@ -4,26 +4,27 @@ from PIL import Image, ImageTk
 import os
 import webbrowser
 
-
 class ModDetailPanel:
     """Handles the display and updating of the mod details."""
 
     def __init__(self, parent):
         self.parent = parent
-        self.sections = {}  # Dictionary to hold section details
 
         # Scrollable area setup
         self.scroll_frame = tk.Frame(self.parent)
         self.canvas = tk.Canvas(self.scroll_frame, bg="lightgray")
         self.scrollbar = ttk.Scrollbar(self.scroll_frame, orient="vertical", command=self.canvas.yview)
-        self.scroll_content = tk.Frame(self.canvas, bg="lightgray")
-        self.scroll_content.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.scroll_content = ttk.Frame(self.canvas)
+        self.scroll_content.bind("<Configure>", lambda e: self.update_scroll_region())
 
         self.canvas.create_window((0, 0), window=self.scroll_content, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
+
+        # Dictionary to hold sections (correct placement to avoid being reset)
+        self.sections = {}
 
         # Create and position the icon label in the first row (centered horizontally)
         self.icon_label = tk.Label(self.scroll_content, bg="lightgray")
@@ -56,6 +57,8 @@ class ModDetailPanel:
         # Create the section frame (content to show/hide)
         section_frame = tk.Frame(parent_frame, bg="lightgray")
         section_frame.grid(row=row + 1, column=0, sticky="nsew", padx=10, pady=5, columnspan=2)
+
+        # Store in the sections dictionary
         self.sections[title] = {'frame': section_frame, 'open': default_open, 'arrow': arrow_label, 'row': row + 1}
 
         # Initially show or hide the section based on the default state
@@ -99,6 +102,42 @@ class ModDetailPanel:
         self.create_dedicated_block(technical_frame, "Environment", "", 0)
         self.create_dedicated_block(technical_frame, "Provides", {}, 1, list_mode=True)
         self.create_dedicated_block(technical_frame, "Suggests", {}, 2, list_mode=True)
+
+    def create_dedicated_block(self, frame, label_text, value, row, list_mode=False):
+        """Creates a label and its corresponding data block (ensuring no overlap)."""
+        # Each label and its value should have their own row and a separate widget.
+        label_frame = ttk.Frame(frame)
+        label_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=5)
+
+        label = ttk.Label(label_frame, text=f"{label_text}:")
+        label.pack(side="left")
+
+        if list_mode and isinstance(value, dict):
+            # If value is a dictionary, display each item on a new line
+            for i, (mod, version) in enumerate(value.items(), start=row + 1):
+                value_label = ttk.Label(label_frame, text=f"{mod} {version}", wraplength=350)
+                value_label.pack(anchor="w", padx=10)
+        else:
+            # Single line value
+            value_label = ttk.Label(label_frame, text=value, wraplength=350)
+            value_label.pack(anchor="w", padx=10)
+
+    def update_scroll_region(self):
+        """Ensures the scrollable area is properly sized after updates."""
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def update_icon(self, mod_data):
+        """Loads and displays the mod icon."""
+        icon_path = mod_data.get("icon_path")
+        if icon_path and os.path.exists(icon_path):
+            try:
+                icon_img = Image.open(icon_path)
+                icon_img = icon_img.resize((64, 64), Image.Resampling.LANCZOS)
+                icon_photo = ImageTk.PhotoImage(icon_img)
+                self.icon_label.config(image=icon_photo)
+                self.icon_label.image = icon_photo  # Keep a reference to avoid garbage collection
+            except Exception as e:
+                print(f"Error loading icon: {e}")
 
     def update_mod_details(self, mod_data):
         """Updates the mod detail panel with the selected mod data."""
@@ -160,75 +199,20 @@ class ModDetailPanel:
                 self.create_clickable_label(contact_frame, field.capitalize(), contact_data[field], row)
                 row += 2  # Add space for the next field (label and clickable link take 2 rows)
 
-    def update_technical_section(self, mod_data):
-        """Updates the Technical section with environment, provides, suggests."""
-        technical_frame = self.sections['Technical']['frame']
-        self.create_dedicated_block(technical_frame, "Environment", self.translate_environment(mod_data.get("environment", "*")), 0)
-        self.create_dedicated_block(technical_frame, "Provides", mod_data.get("provides", {}), 1, list_mode=True)
-        self.create_dedicated_block(technical_frame, "Suggests", mod_data.get("suggests", {}), 2, list_mode=True)
-
-    def create_dedicated_block(self, frame, label_text, value, row, list_mode=False):
-        """Creates a label and its corresponding data block (ensuring no overlap)."""
-        # Label at the top
+    def create_clickable_label(self, frame, label_text, url, row):
+        """Creates a clickable link label for the provided URL."""
+        # Label for the field name
         label = tk.Label(frame, text=f"{label_text}:", anchor="w", justify="left", bg="lightgray", font=("Arial", 10, "bold"))
         label.grid(row=row, column=0, sticky="w", pady=2)
 
-        # Value(s) below the label (handle both single value and list modes)
-        if list_mode and isinstance(value, dict):
-            # If value is a dictionary (for dependencies, etc.), display each item on a new line
-            for i, (mod, version) in enumerate(value.items(), start=row + 1):
-                value_label = tk.Label(frame, text=f"{mod} {version}", anchor="w", justify="left", bg="lightgray", wraplength=350)
-                value_label.grid(row=i, column=0, sticky="w", padx=10)
-        else:
-            # Single line value
-            value_label = tk.Label(frame, text=value, anchor="w", justify="left", bg="lightgray", wraplength=350)
-            value_label.grid(row=row + 1, column=0, sticky="w", padx=10)
+        # Clickable link label
+        link_label = tk.Label(frame, text=url, anchor="w", justify="left", fg="blue", cursor="hand2", bg="lightgray", wraplength=350)
+        link_label.grid(row=row + 1, column=0, sticky="w", padx=10)
+        link_label.bind("<Button-1>", lambda e: webbrowser.open(url))
 
-    def create_clickable_label(self, frame, field_name, url, row):
-        """Creates a clickable label for URL fields in the Contact section."""
-        label_text = f"{field_name}:"
-        label = tk.Label(frame, text=label_text, anchor="w", justify="left", bg="lightgray", font=("Arial", 10, "bold"))
-        label.grid(row=row, column=0, sticky="w", pady=2)
-
-        # Show clickable URL on the next line
-        url_label = tk.Label(frame, text=url, wraplength=350, justify="left", fg="blue", cursor="hand2", bg="lightgray")
-        url_label.grid(row=row + 1, column=0, sticky="w", padx=10)
-
-        # Make the URL clickable
-        url_label.bind("<Button-1>", lambda e: webbrowser.open(url))
-
-    def translate_environment(self, env_value):
-        """Translates the environment field to more human-readable values."""
-        if env_value == "*":
-            return "Client and Server"
-        elif env_value == "client":
-            return "Client-Sided"
-        elif env_value == "server":
-            return "Server-Sided"
-        return "Unknown"
-
-    def update_icon(self, mod_data):
-        """Loads the mod icon if available from the icon_path in JSON."""
-        icon_path = mod_data.get('icon_path', None)
-        if icon_path and os.path.exists(icon_path):
-            icon_image = Image.open(icon_path).resize((128, 128))  # Ensure 128x128 size
-            icon_tk = ImageTk.PhotoImage(icon_image)
-            self.icon_label.config(image=icon_tk)
-            self.icon_label.image = icon_tk  # Keep reference to prevent garbage collection
-        else:
-            self.display_placeholder_icon()
-
-        # Ensure the icon is always centered horizontally
-        self.icon_label.grid_configure(sticky="n")
-
-    def display_placeholder_icon(self):
-        """Displays a green placeholder box if no icon is found."""
-        green_box = Image.new("RGB", (128, 128), color="green")
-        green_tk = ImageTk.PhotoImage(green_box)
-        self.icon_label.config(image=green_tk)
-        self.icon_label.image = green_tk
-
-    def update_scroll_region(self):
-        """Updates the scroll region of the canvas dynamically."""
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
+    def update_technical_section(self, mod_data):
+        """Updates the Technical section with environment, provides, suggests."""
+        technical_frame = self.sections['Technical']['frame']
+        self.create_dedicated_block(technical_frame, "Environment", mod_data.get("environment", "Unknown"), 0)
+        self.create_dedicated_block(technical_frame, "Provides", mod_data.get("provides", {}), 1, list_mode=True)
+        self.create_dedicated_block(technical_frame, "Suggests", mod_data.get("suggests", {}), 2, list_mode=True)
