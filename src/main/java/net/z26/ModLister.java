@@ -1,5 +1,6 @@
 package net.z26;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.Gson;
@@ -13,24 +14,22 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class ModLister {
     public static void main(String[] args) {
         if (args.length != 1) {
-            //System.out.println("Usage: java ModLister <mod_folder>");
             System.exit(1);
         }
 
         File modFolder = new File(args[0]);
         if (!modFolder.exists() || !modFolder.isDirectory()) {
-            //System.out.println("Invalid mod folder.");
             System.exit(1);
         }
 
         // Create temporary folder to store mod info and images
         File tempFolder = new File("mod_temp_data");
         if (!tempFolder.exists() && !tempFolder.mkdir()) {
-            //System.out.println("Failed to create temp folder.");
             System.exit(1);
         }
 
@@ -38,10 +37,6 @@ public class ModLister {
 
         // Write the mod info to a JSON file
         writeModInfoToJson(modInfoList, tempFolder);
-
-        // Emit a message indicating where the mod data has been saved
-        //System.out.println("Mod data extraction and icon generation completed.");
-        //System.out.println("Data stored at: " + tempFolder.getAbsolutePath());
     }
 
     private static List<JsonObject> getModInfo(File modFolder, File tempFolder) {
@@ -58,33 +53,21 @@ public class ModLister {
                         InputStreamReader reader = new InputStreamReader(zipFile.getInputStream(jsonEntry));
                         JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
 
-                        // Extract mod information
-                        String modId = jsonObject.get("id").getAsString();
-                        String modName = jsonObject.has("name") ? jsonObject.get("name").getAsString() : modId;
-                        String version = jsonObject.has("version") ? jsonObject.get("version").getAsString() : "Unknown";
-                        String description = jsonObject.has("description") ? jsonObject.get("description").getAsString() : "No description available.";
-                        String authors = jsonObject.has("authors") ? jsonObject.get("authors").toString() : "No authors available.";
-                        String contact = jsonObject.has("contact") ? jsonObject.get("contact").toString() : "No contact info available.";
-                        boolean isEnabled = modFile.getName().endsWith(".jar");  // Check if mod is enabled
+                        // Extract mod information dynamically (all fields)
+                        JsonObject modInfo = new JsonObject();
+                        for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                            modInfo.add(entry.getKey(), entry.getValue());
+                        }
+
+                        // Add mod file-specific information
+                        boolean isEnabled = modFile.getName().endsWith(".jar");
+                        modInfo.addProperty("enabled", isEnabled);  // Store enabled status
+                        modInfo.addProperty("file_path", modFile.getAbsolutePath());  // File path
 
                         // Handle extracting the icon
                         String iconPath = jsonObject.has("icon") ? jsonObject.get("icon").getAsString() : null;
-                        String extractedIconPath = extractIcon(zipFile, iconPath, modId, tempFolder);
-
-                        // Create a JSON object for this mod's information
-                        JsonObject modInfo = new JsonObject();
-                        modInfo.addProperty("mod_id", modId);
-                        modInfo.addProperty("mod_name", modName);
-                        modInfo.addProperty("version", version);
-                        modInfo.addProperty("description", description);
-                        modInfo.addProperty("authors", authors);
-                        modInfo.addProperty("contact", contact);
+                        String extractedIconPath = extractIcon(zipFile, iconPath, modInfo.get("id").getAsString(), tempFolder);
                         modInfo.addProperty("icon_path", extractedIconPath);
-                        modInfo.addProperty("enabled", isEnabled);  // Store enabled status
-                        modInfo.addProperty("modloader", "Fabric");  // Assuming all mods are Fabric for now
-
-                        // Add the absolute file path
-                        modInfo.addProperty("file_path", modFile.getAbsolutePath());
 
                         modInfoList.add(modInfo);
                     }
@@ -119,7 +102,7 @@ public class ModLister {
                 }
             }
         } catch (Exception e) {
-            //System.out.println("Error extracting icon for mod: " + modId);
+            // Error handling for icon extraction
         }
 
         return null;
@@ -131,7 +114,6 @@ public class ModLister {
 
         try (FileWriter writer = new FileWriter(jsonFile)) {
             gson.toJson(modInfoList, writer);
-            //System.out.println("Mod data written to: " + jsonFile.getAbsolutePath());
         } catch (Exception e) {
             e.printStackTrace();
         }

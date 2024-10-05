@@ -63,9 +63,9 @@ class ModDependencyListerApp:
         self.separator = ttk.Separator(self.main_frame, orient="vertical")
         self.main_frame.add(self.separator)
 
-        # Create Mod Detail Panel
+        # Create Mod Detail Panel (fix: use scroll_frame to add directly to PanedWindow)
         self.mod_detail_panel = ModDetailPanel(self.main_frame)
-        self.main_frame.add(self.mod_detail_panel.mod_detail_frame)
+        self.main_frame.add(self.mod_detail_panel.scroll_frame)
 
         # Bind mod selection events (mouse release for selection)
         self.tree.bind("<ButtonRelease-1>", self.on_mod_select)
@@ -120,18 +120,19 @@ class ModDependencyListerApp:
                 print(f"Error accessing JAR file: {e}")
 
     def load_mod_data(self, json_file):
-        # Load the JSON data file
+        """Load the JSON data and populate the mod list with the correct fields."""
         try:
             with open(json_file, 'r') as f:
                 self.mod_info = json.load(f)  # Store all mod data in a class attribute
 
             # Populate the table with mod info
             for mod in self.mod_info:
+                # Retrieve data from the mod JSON
                 enabled = "☑" if mod.get("enabled", True) else "☐"
-                mod_id = mod.get("mod_id", "Unknown")
-                mod_name = mod.get("mod_name", "Unknown")
-                modloader = mod.get("modloader", "Unknown")
-                version = mod.get("version", "Unknown")
+                mod_id = mod.get("id", "Unknown")  # "id" is the correct key for Mod ID
+                mod_name = mod.get("name", mod_id)  # If no mod name, fallback to mod ID
+                modloader = mod.get("modloader", "Unknown")  # For now, modloader is "Unknown"
+                version = mod.get("version", "Unknown")  # "version" key is correct
 
                 # Insert mod data into the Treeview
                 self.tree.insert("", "end", values=(enabled, mod_id, mod_name, modloader, version))
@@ -145,12 +146,12 @@ class ModDependencyListerApp:
         """Handles mod selection to display details when a mod is selected"""
         selected_item = self.tree.selection()[0]
         values = self.tree.item(selected_item, "values")
-        mod_id = values[1]
+        mod_id = values[1]  # Correct mod ID extraction
 
         # Find the mod details in the loaded JSON data
-        selected_mod_data = next((mod for mod in self.mod_info if mod.get('mod_id') == mod_id), None)
+        selected_mod_data = next((mod for mod in self.mod_info if mod.get('id') == mod_id), None)
         if selected_mod_data:
-            # Update the mod detail panel
+            # Update the mod detail panel with the correct mod data
             self.mod_detail_panel.update_mod_details(selected_mod_data)
 
     def on_checkbox_click(self, event):
