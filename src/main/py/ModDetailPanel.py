@@ -15,7 +15,7 @@ class ModDetailPanel:
         self.canvas = tk.Canvas(self.scroll_frame, bg="lightgray")
         self.scrollbar = ttk.Scrollbar(self.scroll_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_content = ttk.Frame(self.canvas)
-        self.scroll_content.bind("<Configure>", lambda e: self.update_scroll_region())
+        self.scroll_content.bind("<Configure>", self.on_resize)
 
         self.canvas.create_window((0, 0), window=self.scroll_content, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
@@ -41,10 +41,15 @@ class ModDetailPanel:
         self.init_compatibility_section()
         self.init_technical_section()
 
+        # Bind mouse scroll events to the canvas
+        self.canvas.bind_all("<MouseWheel>", self.on_mouse_wheel)
+        self.canvas.bind("<Button-2>", self.on_middle_click_scroll)
+        self.canvas.bind("<B2-Motion>", self.on_middle_drag_scroll)
+
     def create_category_header(self, title, parent_frame, row, default_open=True):
         """Creates an underlined category label with an arrow and toggle functionality."""
         header_frame = tk.Frame(parent_frame, bg="lightgray")
-        header_frame.grid(row=row, column=0, sticky="nsew", pady=5, columnspan=2)
+        header_frame.grid(row=row, column=0, sticky="ew", pady=5, columnspan=2)
 
         # Arrow label that will point up or down depending on section state
         arrow_label = tk.Label(header_frame, text="▼" if default_open else "▲", font=("Arial", 12), bg="lightgray")
@@ -57,6 +62,7 @@ class ModDetailPanel:
         # Create the section frame (content to show/hide)
         section_frame = tk.Frame(parent_frame, bg="lightgray")
         section_frame.grid(row=row + 1, column=0, sticky="nsew", padx=10, pady=5, columnspan=2)
+        section_frame.grid_columnconfigure(0, weight=1)  # Ensure the section frame stretches horizontally
 
         # Store in the sections dictionary
         self.sections[title] = {'frame': section_frame, 'open': default_open, 'arrow': arrow_label, 'row': row + 1}
@@ -105,26 +111,52 @@ class ModDetailPanel:
 
     def create_dedicated_block(self, frame, label_text, value, row, list_mode=False):
         """Creates a label and its corresponding data block (ensuring no overlap)."""
-        # Each label and its value should have their own row and a separate widget.
-        label_frame = ttk.Frame(frame)
+        label_frame = tk.Frame(frame)  # Each label has its own frame to handle dynamic width
         label_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=5)
+        label_frame.grid_columnconfigure(0, weight=1)  # Ensure label frame stretches horizontally
 
-        label = ttk.Label(label_frame, text=f"{label_text}:")
-        label.pack(side="left")
+        label = tk.Label(label_frame, text=f"{label_text}:", anchor="w", wraplength=self.get_wraplength())  # Wraplength for label
+        label.pack(side="left", anchor="w")
 
         if list_mode and isinstance(value, dict):
-            # If value is a dictionary, display each item on a new line
             for i, (mod, version) in enumerate(value.items(), start=row + 1):
-                value_label = ttk.Label(label_frame, text=f"{mod} {version}", wraplength=350)
+                value_label = tk.Label(label_frame, text=f"{mod} {version}", anchor="w", wraplength=self.get_wraplength())
                 value_label.pack(anchor="w", padx=10)
         else:
-            # Single line value
-            value_label = ttk.Label(label_frame, text=value, wraplength=350)
+            value_label = tk.Label(label_frame, text=value, anchor="w", wraplength=self.get_wraplength())  # Wraplength for value
             value_label.pack(anchor="w", padx=10)
 
     def update_scroll_region(self):
         """Ensures the scrollable area is properly sized after updates."""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def on_mouse_wheel(self, event):
+        """Handles mouse wheel scrolling."""
+        self.canvas.yview_scroll(-1 * int(event.delta / 120), "units")
+
+    def on_middle_click_scroll(self, event):
+        """Start the middle mouse button scroll."""
+        self.canvas.scan_mark(event.x, event.y)
+
+    def on_middle_drag_scroll(self, event):
+        """Handles middle mouse button dragging to scroll."""
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
+    def on_resize(self, event):
+        """Handles both scroll region update and dynamic word wrapping on resize."""
+        self.update_scroll_region()
+        self.update_wraplength(event)
+
+    def get_wraplength(self):
+        """Returns a suitable wraplength based on the current width of the parent canvas."""
+        return max(self.canvas.winfo_width() - 20, 100)  # Ensure padding around the edges
+
+    def update_wraplength(self, event):
+        """Updates the wraplength of all labels when the panel is resized."""
+        new_wraplength = self.get_wraplength()
+        for widget in self.scroll_content.winfo_children():
+            if isinstance(widget, tk.Label):  # Apply wraplength to tk.Labels
+                widget.config(wraplength=new_wraplength)
 
     def update_icon(self, mod_data):
         """Loads and displays the mod icon."""
@@ -206,7 +238,7 @@ class ModDetailPanel:
         label.grid(row=row, column=0, sticky="w", pady=2)
 
         # Clickable link label
-        link_label = tk.Label(frame, text=url, anchor="w", justify="left", fg="blue", cursor="hand2", bg="lightgray", wraplength=350)
+        link_label = tk.Label(frame, text=url, anchor="w", justify="left", fg="blue", cursor="hand2", bg="lightgray", wraplength=self.get_wraplength())
         link_label.grid(row=row + 1, column=0, sticky="w", padx=10)
         link_label.bind("<Button-1>", lambda e: webbrowser.open(url))
 
@@ -216,3 +248,4 @@ class ModDetailPanel:
         self.create_dedicated_block(technical_frame, "Environment", mod_data.get("environment", "Unknown"), 0)
         self.create_dedicated_block(technical_frame, "Provides", mod_data.get("provides", {}), 1, list_mode=True)
         self.create_dedicated_block(technical_frame, "Suggests", mod_data.get("suggests", {}), 2, list_mode=True)
+

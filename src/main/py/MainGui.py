@@ -27,7 +27,7 @@ class ModDependencyListerApp:
         view_menu = Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="View", menu=view_menu)
 
-        # Main section - mod list section and mod detail section side by side
+        # Main PanedWindow with mod list and mod detail sections
         self.main_frame = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -63,7 +63,7 @@ class ModDependencyListerApp:
         self.separator = ttk.Separator(self.main_frame, orient="vertical")
         self.main_frame.add(self.separator)
 
-        # Create Mod Detail Panel (fix: use scroll_frame to add directly to PanedWindow)
+        # Create Mod Detail Panel (Resizable inside PanedWindow)
         self.mod_detail_panel = ModDetailPanel(self.main_frame)
         self.main_frame.add(self.mod_detail_panel.scroll_frame)
 
@@ -72,6 +72,9 @@ class ModDependencyListerApp:
 
         # Bind checkboxes to click events (mouse press for checkbox)
         self.tree.bind("<Button-1>", self.on_checkbox_click)
+
+        # Bind the resize event to the window to ensure the mod detail panel updates properly
+        self.root.bind("<Configure>", self.on_resize)
 
         # Handle application closing to clean up
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
@@ -199,6 +202,10 @@ class ModDependencyListerApp:
             selected_mod_data['file_path'] = new_mod_file
             selected_mod_data['enabled'] = not new_mod_file.endswith(".disabled")
             self.on_mod_select(None)  # Refresh the details panel
+
+    def on_resize(self, event):
+        """Handles window resize events and propagates changes to mod detail panel"""
+        self.mod_detail_panel.update_scroll_region()  # Ensure correct resizing behavior of mod detail panel
 
     def on_exit(self):
         """Handle application exit by cleaning up the mod_temp_data folder"""
