@@ -1,4 +1,3 @@
-# ModDetailPanel.py
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
@@ -42,8 +41,17 @@ class ModDetailPanel:
         self.init_compatibility_section()
         self.init_technical_section()
 
-        # Bind mouse scroll events to the canvas
+        # Bind mouse scroll events to the canvas (scroll only when mouse is over the canvas)
+        self.canvas.bind("<Enter>", self.bind_mouse_scroll)
+        self.canvas.bind("<Leave>", self.unbind_mouse_scroll)
+
+    def bind_mouse_scroll(self, event):
+        """Enable scrolling when the mouse enters the mod detail panel."""
         self.canvas.bind_all("<MouseWheel>", self.on_mouse_wheel)
+
+    def unbind_mouse_scroll(self, event):
+        """Disable scrolling when the mouse leaves the mod detail panel."""
+        self.canvas.unbind_all("<MouseWheel>")
 
     def create_category_header(self, title, parent_frame, row, default_open=True):
         """Creates an underlined category label with an arrow and toggle functionality."""
@@ -247,4 +255,3 @@ class ModDetailPanel:
         self.create_dedicated_block(technical_frame, "Environment", mod_data.get("environment", "Unknown"), 0)
         self.create_dedicated_block(technical_frame, "Provides", mod_data.get("provides", {}), 1, list_mode=True)
         self.create_dedicated_block(technical_frame, "Suggests", mod_data.get("suggests", {}), 2, list_mode=True)
-

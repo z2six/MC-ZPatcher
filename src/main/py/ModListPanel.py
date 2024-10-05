@@ -23,11 +23,11 @@ class ModListPanel:
         self.tree.heading("Version", text="Version")
 
         # Set fixed column widths and allow horizontal scrolling
-        self.tree.column("Enabled", width=65, stretch=False)
-        self.tree.column("Mod ID", width=150, stretch=False)
-        self.tree.column("Mod Name", width=250, stretch=False)
-        self.tree.column("Modloader", width=150, stretch=False)
-        self.tree.column("Version", width=100, stretch=False)
+        self.tree.column("Enabled", width=65, stretch=True)
+        self.tree.column("Mod ID", width=150, stretch=True)
+        self.tree.column("Mod Name", width=250, stretch=True)
+        self.tree.column("Modloader", width=150, stretch=True)
+        self.tree.column("Version", width=100, stretch=True)
 
         self.tree.grid(row=0, column=0, sticky="nsew")
 

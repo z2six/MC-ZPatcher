@@ -8,7 +8,6 @@ from ConfigHandler import ConfigHandler
 import json
 import os
 
-
 class ModDependencyListerApp:
     def __init__(self, root):
         self.root = root
@@ -83,19 +82,14 @@ class ModDependencyListerApp:
             self.mod_detail_panel.scroll_frame.pack(fill="both", expand=True)
         self.mod_detail_frame.grid(row=0, column=2, sticky="nswe")
 
-        # If Detail panel is disabled, ensure full width for Mod List
-        if not self.config['detailpane']['enabled']:
-            self.mod_detail_frame.grid_remove()
-            self.mod_list_frame.config(width=self.main_frame.winfo_width() - 1)
-
         # Ensure mod_list_frame allows dynamic resizing
         self.main_frame.grid_columnconfigure(0, weight=1)  # Only the Mod List should resize
         self.main_frame.grid_rowconfigure(0, weight=1)
 
         # Store the starting position for dragging the divider
         self.start_x = 0
-        self.start_list_width = 0
-        self.start_detail_width = 0
+        self.start_list_weight = 0
+        self.start_detail_weight = 0
 
         # Handle application closing to clean up
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
@@ -103,20 +97,25 @@ class ModDependencyListerApp:
     def start_drag(self, event):
         """Record the starting position for the divider drag."""
         self.start_x = event.x
-        self.start_list_width = self.mod_list_frame.winfo_width()
-        self.start_detail_width = self.mod_detail_frame.winfo_width()
+        self.start_list_weight = self.main_frame.grid_columnconfigure(0)['weight']
+        self.start_detail_weight = self.main_frame.grid_columnconfigure(2)['weight']
 
     def do_drag(self, event):
         """Handle the dragging of the divider and resize the panels."""
         delta_x = event.x - self.start_x
-        new_list_width = self.start_list_width + delta_x
-        new_detail_width = self.start_detail_width - delta_x
+        total_width = self.main_frame.winfo_width()
 
-        # Prevent shrinking below 100px for both panels
-        if new_list_width > 100 and new_detail_width > 100:
-            self.mod_list_frame.config(width=new_list_width)
-            self.mod_detail_frame.config(width=new_detail_width)
-            self.main_frame.update_idletasks()  # Force the layout to refresh
+        # Calculate the percentage of the drag relative to the total window width
+        list_weight_delta = (delta_x / total_width) * 5  # Arbitrary scale factor for sensitivity
+        detail_weight_delta = -list_weight_delta
+
+        new_list_weight = max(1, int(self.start_list_weight + list_weight_delta))
+        new_detail_weight = max(1, int(self.start_detail_weight + detail_weight_delta))
+
+        # Set the new column weights based on drag
+        self.main_frame.grid_columnconfigure(0, weight=new_list_weight)
+        self.main_frame.grid_columnconfigure(2, weight=new_detail_weight)
+        self.main_frame.update_idletasks()  # Force the layout to refresh
 
     def toggle_detail_panel(self):
         """Toggles the visibility of the detail panel based on the menu selection."""
@@ -131,6 +130,10 @@ class ModDependencyListerApp:
                 self.mod_detail_panel.scroll_frame.pack(fill="both", expand=True)
             self.mod_detail_frame.grid()  # Make the frame visible
 
+            # Update grid column weights when the detail panel is shown
+            self.main_frame.grid_columnconfigure(0, weight=3)
+            self.main_frame.grid_columnconfigure(2, weight=2)
+
             # If a mod is selected, update the ModDetailPanel with mod details
             selected_items = self.mod_list_panel.tree.selection()
             if selected_items:
@@ -142,15 +145,14 @@ class ModDependencyListerApp:
                     self.mod_detail_panel.update_mod_details(selected_mod_data)
 
         else:
-            # Remove the ModDetailPanel from the frame and ensure it's destroyed properly
+            # Remove the ModDetailPanel from the frame
             if self.mod_detail_panel:
                 self.mod_detail_frame.grid_remove()  # Hide the frame
-                self.mod_detail_panel.scroll_frame.destroy()  # Destroy the frame properly
                 self.mod_detail_panel = None
 
             # Expand the Mod List to full width when detail panel is hidden
-            self.mod_list_frame.config(width=self.main_frame.winfo_width() - 1)
-            self.main_frame.update_idletasks()
+            self.main_frame.grid_columnconfigure(0, weight=1)  # Mod List takes full width
+            self.main_frame.grid_columnconfigure(2, weight=0)  # Detail panel has no weight
 
     def toggle_detail_popout(self):
         """Toggles the popout setting of the detail panel."""
@@ -171,24 +173,69 @@ class ModDependencyListerApp:
         pass
 
     def select_folder(self):
-        """Handle mod folder selection."""
-        pass
+        # Get the folder path from file dialog
+        folder_path = filedialog.askdirectory()
+        self.selected_folder = folder_path
+
+        if folder_path:
+            if os.path.exists("mod_temp_data"):
+                shutil.rmtree("mod_temp_data")
+            jar_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'build', 'libs', 'MC-ZPatcher.jar')
+
+            if not os.path.exists(jar_path):
+                print(f"Error: JAR file not found at {jar_path}")
+                return
+
+            try:
+                result = subprocess.run(['java', '--enable-preview', '-jar', jar_path, folder_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                print(result.stdout, result.stderr)
+
+                if result.returncode != 0:
+                    print(f"Error running Java process: {result.stderr}")
+                    return
+
+                self.load_mod_data("mod_temp_data/mod_data.json")
+
+            except Exception as e:
+                print(f"Error accessing JAR file: {e}")
 
     def load_mod_data(self, json_file):
         """Load the JSON data and populate the mod list with the correct fields."""
-        pass
+        try:
+            with open(json_file, 'r') as f:
+                mod_data = json.load(f)
+            self.mod_list_panel.populate_mod_list(mod_data)
+        except FileNotFoundError:
+            print(f"File {json_file} not found.")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON data: {e}")
 
     def on_mod_select(self, event):
         """Handles mod selection to display details when a mod is selected."""
-        pass
+        selected_items = self.mod_list_panel.tree.selection()
+        if selected_items:
+            selected_item = selected_items[0]
+            values = self.mod_list_panel.tree.item(selected_item, "values")
+            mod_id = values[1]
+            selected_mod_data = next((mod for mod in self.mod_list_panel.mod_info if mod.get('id') == mod_id), None)
+            if selected_mod_data and self.mod_detail_panel:
+                self.mod_detail_panel.update_mod_details(selected_mod_data)
 
     def on_checkbox_click(self, event):
         """Handles checkbox clicks for enabling/disabling mods."""
-        pass
+        region = self.mod_list_panel.tree.identify("region", event.x, event.y)
+        column = self.mod_list_panel.tree.identify_column(event.x)
+
+        if region == "cell" and column == "#1":
+            item = self.mod_list_panel.tree.identify_row(event.y)
+            if item:
+                self.mod_list_panel.toggle_mod(item)
 
     def on_exit(self):
         """Handle application exit by cleaning up the mod_temp_data folder."""
-        pass
+        if os.path.exists("mod_temp_data"):
+            shutil.rmtree("mod_temp_data")
+        self.root.quit()
 
 
 if __name__ == "__main__":
