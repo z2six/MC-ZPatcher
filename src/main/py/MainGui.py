@@ -5,6 +5,7 @@ import subprocess
 from ModDetailPanel import ModDetailPanel
 from ModListPanel import ModListPanel
 from ConfigHandler import ConfigHandler
+from ColumnSetting import ColumnSetting  # Import the new ColumnSetting class
 import json
 import os
 
@@ -17,6 +18,9 @@ class ModDependencyListerApp:
         # Load or create config
         self.config_handler = ConfigHandler()  # Initialize config handler
         self.config = self.config_handler.load_or_create_config()  # Load the config
+
+        # Initialize the ColumnSetting for column management
+        self.column_setting = ColumnSetting(self.root, self.config_handler, self.config)
 
         # Add menu bar
         self.menu_bar = Menu(self.root)
@@ -170,7 +174,7 @@ class ModDependencyListerApp:
 
     def on_columns_click(self):
         """Opens the column settings for the list panel."""
-        pass
+        self.column_setting.open_column_window()
 
     def select_folder(self):
         # Get the folder path from file dialog
