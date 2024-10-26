@@ -15,6 +15,7 @@ import java.util.zip.ZipFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class ModLister {
     public static void main(String[] args) {
@@ -53,8 +54,16 @@ public class ModLister {
                         InputStreamReader reader = new InputStreamReader(zipFile.getInputStream(jsonEntry));
                         JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
 
-                        // Extract mod information dynamically (all fields)
+                        // Create a new JsonObject to store mod information
                         JsonObject modInfo = new JsonObject();
+
+                        // Add custom fields at the start of the JsonObject
+                        modInfo.addProperty("unique_id", UUID.randomUUID().toString());  // Unique identifier
+                        modInfo.addProperty("curseforge_project_id", "");  // Placeholder for CurseForge project ID
+                        modInfo.addProperty("curseforge_slug", "");  // Placeholder for CurseForge project ID
+                        modInfo.addProperty("modrinth_project_id", "");   // Placeholder for Modrinth project ID
+
+                        // Extract all fields dynamically from fabric.mod.json
                         for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
                             modInfo.add(entry.getKey(), entry.getValue());
                         }
@@ -69,6 +78,7 @@ public class ModLister {
                         String extractedIconPath = extractIcon(zipFile, iconPath, modInfo.get("id").getAsString(), tempFolder);
                         modInfo.addProperty("icon_path", extractedIconPath);
 
+                        // Add the completed mod info to the list
                         modInfoList.add(modInfo);
                     }
                 } catch (Exception e) {

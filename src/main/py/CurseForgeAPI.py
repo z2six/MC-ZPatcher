@@ -10,6 +10,22 @@ class CurseForgeSync:
             "x-api-key": self.api_key
         }
 
+    def query_mod_slug_by_id(self, project_id):
+        """Queries CurseForge API for the mod slug by project ID."""
+        url = f"{self.base_url}/mods/{project_id}"
+        response = requests.get(url, headers=self.headers)
+
+        if response.status_code == 200:
+            mod_data = response.json().get("data")
+            if mod_data:
+                slug = mod_data.get("slug")
+                print(f"[INFO] Retrieved CurseForge Slug: {slug}")
+                return slug
+        else:
+            print(f"[ERROR] Failed to retrieve slug for project ID {project_id} with status {response.status_code}: {response.text}")
+
+        return None
+
     def query_mod_by_hash(self, file_path):
         """Queries CurseForge by Game ID and SHA-1 file hash."""
         sha1_hash = self.calculate_sha1(file_path)

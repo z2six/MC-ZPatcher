@@ -1,185 +1,157 @@
 # ModListPanel.py
-import tkinter as tk
-from tkinter import ttk, Scrollbar
+from PyQt5.QtWidgets import (
+    QWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QAbstractItemView, QScrollBar
+)
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, pyqtSignal
+import os
 
-class ModListPanel:
-    def __init__(self, parent, on_mod_select, on_checkbox_click, icons):
-        """Initializes the mod list section with icons."""
-        self.parent = parent
-        self.on_mod_select = on_mod_select
-        self.on_checkbox_click = on_checkbox_click
-        self.icons = icons  # Store the icons dictionary
+class ModListPanel(QWidget):
+    # Signal to trigger icon update on the main thread
+    update_icon_signal = pyqtSignal(str, str)  # Pass unique_id and status_key
 
-        # Create the mod list frame
-        self.mod_list_frame = tk.Frame(self.parent)
+    def __init__(self, mod_detail_panel=None):
+        super().__init__()
+        self.mod_detail_panel = mod_detail_panel
 
-        # Treeview to display mod list with added CF Sync column
-        self.tree = ttk.Treeview(self.mod_list_frame, columns=("Enabled", "Mod ID", "Mod Name", "Modloader", "Version", "CF Sync"), show="headings")
-        self.tree.heading("Enabled", text="Enabled")
-        self.tree.heading("Mod ID", text="Mod ID")
-        self.tree.heading("Mod Name", text="Mod Name")
-        self.tree.heading("Modloader", text="Modloader")
-        self.tree.heading("Version", text="Version")
-        self.tree.heading("CF Sync", text="CF Sync")  # New column for CurseForge Sync status
+        # Load icons for CF Sync status (assuming images are in `../resources/icons`)
+        icon_folder = os.path.join(os.path.dirname(__file__), '..', 'resources', 'icons')
+        self.enabled_icon = QIcon(os.path.join(icon_folder, "enabled.png"))
+        self.disabled_icon = QIcon(os.path.join(icon_folder, "disabled.png"))
+        self.icon_default = QIcon(os.path.join(icon_folder, "orange_question.png"))
+        self.icon_searching = QIcon(os.path.join(icon_folder, "blue_sync.png"))
+        self.icon_found = QIcon(os.path.join(icon_folder, "green_checkmark.png"))
+        self.icon_not_found = QIcon(os.path.join(icon_folder, "red_cross.png"))
 
-        # Set fixed column widths
-        self.tree.column("Enabled", width=65)
-        self.tree.column("Mod ID", width=150)
-        self.tree.column("Mod Name", width=250)
-        self.tree.column("Modloader", width=150)
-        self.tree.column("Version", width=100)
-        self.tree.column("CF Sync", width=75)  # Column for CF Sync status
+        # Set up layout and table widget
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["Enabled", "Mod ID", "Mod Name", "Modloader", "Version", "CF Sync"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        # Define column widths for better visual formatting
+        self.table.setColumnWidth(0, 65)
+        self.table.setColumnWidth(1, 150)
+        self.table.setColumnWidth(2, 250)
+        self.table.setColumnWidth(3, 150)
+        self.table.setColumnWidth(4, 100)
+        self.table.setColumnWidth(5, 75)
 
-        # Add vertical and horizontal scrollbars
-        self.mod_list_scrollbar_y = Scrollbar(self.mod_list_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.mod_list_scrollbar_y.set)
-        self.mod_list_scrollbar_y.grid(row=0, column=1, sticky="ns")
+        # Scrollbars
+        self.table.setVerticalScrollBar(QScrollBar())
+        self.table.setHorizontalScrollBar(QScrollBar())
 
-        self.mod_list_scrollbar_x = Scrollbar(self.mod_list_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(xscrollcommand=self.mod_list_scrollbar_x.set)
-        self.mod_list_scrollbar_x.grid(row=1, column=0, sticky="ew")
+        # Connect row selection to handle_mod_select
+        self.table.itemSelectionChanged.connect(self.handle_mod_select)
 
-        # Allow dynamic resizing of the mod list
-        self.mod_list_frame.grid_rowconfigure(0, weight=1)
-        self.mod_list_frame.grid_columnconfigure(0, weight=1)
+        # Add table to layout
+        self.layout.addWidget(self.table)
+        self.mod_info = []  # Store loaded mod data, including unique_id
 
-        # Bind mod selection events
-        self.tree.bind("<ButtonRelease-1>", self.on_mod_select)
+        # Enable icon click functionality for toggling
+        self.table.cellClicked.connect(self.handle_icon_click)
 
-        # Bind checkboxes to click events
-        self.tree.bind("<Button-1>", self.on_checkbox_click)
-
-        # Dictionary to hold icon labels for each row
-        self.icon_labels = {}
+        # Connect the signal to the update method
+        self.update_icon_signal.connect(self.update_cf_sync_status)
 
     def populate_mod_list(self, mod_data):
         """Populates the mod list with the provided mod data."""
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        self.table.setRowCount(0)
+        self.mod_info = mod_data  # Store mod data with unique_id in memory
+        print("ModListPanel - mod_info populated:", self.mod_info)
 
-        self.mod_info = mod_data
-
-        # Remove any existing labels
-        for label in self.icon_labels.values():
-            label.destroy()
-        self.icon_labels.clear()
-
-        # Add each mod to the Treeview and overlay an icon label
         for mod in self.mod_info:
-            enabled = "☑" if mod.get("enabled", True) else "☐"
-            mod_id = mod.get("id", "Unknown")
-            mod_name = mod.get("name", mod_id)
-            modloader = mod.get("modloader", "Unknown")
-            version = mod.get("version", "Unknown")
+            row_position = self.table.rowCount()
+            self.table.insertRow(row_position)
 
-            # Insert each mod row and get its item ID
-            item_id = self.tree.insert("", "end", values=(enabled, mod_id, mod_name, modloader, version, ""))
+            # Determine enabled status from file name
+            enabled = not mod.get("file_path", "").endswith(".disabled")
+            mod["enabled"] = enabled
 
-            # Call a function to position the default icon in the CF Sync column for this row
-            self._place_icon_for_row(item_id, "default")
+            # Set icon based on enabled/disabled state
+            enabled_item = QTableWidgetItem()
+            enabled_item.setIcon(self.enabled_icon if enabled else self.disabled_icon)
+            self.table.setItem(row_position, 0, enabled_item)
+            self.table.setItem(row_position, 1, QTableWidgetItem(mod.get("id", "Unknown")))
+            self.table.setItem(row_position, 2, QTableWidgetItem(mod.get("name", "Unknown")))
+            self.table.setItem(row_position, 3, QTableWidgetItem(mod.get("modloader", "Unknown")))
+            self.table.setItem(row_position, 4, QTableWidgetItem(mod.get("version", "Unknown")))
 
-    def _place_icon_for_row(self, item_id, icon_key):
-        """Helper method to place an icon in the CF Sync column for a given row item."""
-        # Use bbox to get coordinates and dimensions of the CF Sync cell
-        bbox = self.tree.bbox(item_id, column="CF Sync")
-        if bbox:
-            x, y, width, height = bbox
-            icon = self.icons[icon_key]
-            # Center the icon within the cell
-            x_centered = x + (width - icon.width()) // 2
-            y_centered = y + (height - icon.height()) // 2
+            # Add CF Sync icon (set default initially)
+            self._set_icon_for_row(row_position, self.icon_default)
 
-            # Create the label if not exists, or update the image if it does
-            if item_id in self.icon_labels:
-                self.icon_labels[item_id].config(image=icon)
-                self.icon_labels[item_id].place(x=x_centered, y=y_centered)
-            else:
-                label = tk.Label(self.tree, image=icon, borderwidth=0)
-                label.place(x=x_centered, y=y_centered)
-                self.icon_labels[item_id] = label
+            # Store unique_id directly in mod_info for consistent referencing
+            mod["unique_id"] = mod.get("unique_id", "Unknown")
 
-    def update_cf_sync_status(self, mod_id, status_key):
-        """Updates the CF Sync status icon for a specific mod."""
-        icon = self.icons.get(status_key, self.icons["default"])
+    def _set_icon_for_row(self, row_position, icon):
+        """Helper method to set an icon in the CF Sync column for a given row."""
+        icon_item = QTableWidgetItem()
+        icon_item.setIcon(icon)
+        self.table.setItem(row_position, 5, icon_item)
 
-        # Find the row by mod_id and update the corresponding icon label
-        for item_id in self.tree.get_children():
-            values = self.tree.item(item_id, "values")
-            if values[1] == mod_id:  # Check if mod_id matches
-                self._place_icon_for_row(item_id, status_key)  # Update icon placement
-                break
+    def handle_mod_select(self):
+        """Handles row selection and notifies ModDetailPanel of the selected mod data."""
+        selected_row = self.table.currentRow()
+        if selected_row < 0:
+            print("No row selected.")
+            return
 
-    def toggle_mod(self, item):
-        """Enables or disables a mod by renaming the file and updating mod_data.json."""
-        values = self.tree.item(item, "values")
-        mod_id = values[1]  # Extract mod ID from selected row
+        # Retrieve the mod data for the selected row
+        mod_id = self.table.item(selected_row, 1).text()
         selected_mod_data = next((mod for mod in self.mod_info if mod.get("id") == mod_id), None)
 
         if selected_mod_data:
-            mod_file = selected_mod_data.get("file_path")
-            enabled = selected_mod_data.get("enabled")
+            # Notify ModDetailPanel to update itself with the selected mod's data
+            if self.mod_detail_panel:
+                self.mod_detail_panel.update_display(selected_mod_data)
 
-            if mod_file:
-                try:
-                    # Check current file name and toggle between enabled/disabled states
-                    if enabled:
-                        new_mod_file = mod_file + ".disabled"
-                        os.rename(mod_file, new_mod_file)  # Rename the file
-                        self.tree.set(item, "Enabled", "☐")  # Update Treeview checkbox
-                    else:
-                        new_mod_file = mod_file.replace(".disabled", "")
-                        os.rename(mod_file, new_mod_file)
-                        self.tree.set(item, "Enabled", "☑")
+    def handle_icon_click(self, row, column):
+        """Handles icon click to toggle enabled/disabled state if clicked on the Enabled column."""
+        if column == 0:  # Enabled column
+            mod_id = self.table.item(row, 1).text()
+            selected_mod_data = next((mod for mod in self.mod_info if mod.get("id") == mod_id), None)
+            if selected_mod_data:
+                self.toggle_mod_enabled(selected_mod_data, row)
 
-                    # Update mod file path and enabled status
-                    selected_mod_data["file_path"] = new_mod_file
-                    selected_mod_data["enabled"] = not new_mod_file.endswith(".disabled")
+    def toggle_mod_enabled(self, mod_data, row):
+        """Toggles the enabled/disabled state of the mod file by renaming it."""
+        file_path = mod_data.get("file_path")
+        if not file_path or not os.path.isfile(file_path):
+            print("File path invalid or file does not exist.")
+            return
 
-                    # Update the mod_data.json file (pseudo-code: modify this based on your actual file structure)
-                    self.update_mod_data_json()
+        # Determine new file path and rename based on current state
+        if file_path.endswith(".disabled"):
+            new_file_path = file_path[:-9]  # Remove ".disabled"
+            mod_data["enabled"] = True
+            self.table.item(row, 0).setIcon(self.enabled_icon)
+        else:
+            new_file_path = file_path + ".disabled"
+            mod_data["enabled"] = False
+            self.table.item(row, 0).setIcon(self.disabled_icon)
 
-                except Exception as e:
-                    print(f"Error renaming mod file: {e}")
-
-    def update_mod_data_json(self):
-        """Update the mod_data.json file after renaming mod files."""
         try:
-            with open("mod_temp_data/mod_data.json", "w") as f:
-                json.dump(self.mod_info, f, indent=4)  # Save updated mod info back to JSON file
-        except Exception as e:
-            print(f"Error updating mod_data.json: {e}")
+            os.rename(file_path, new_file_path)
+            mod_data["file_path"] = new_file_path
+            print(f"File renamed to: {new_file_path}")
+        except OSError as e:
+            print(f"Error renaming file: {e}")
 
-    def get_frame(self):
-        """Returns the frame that contains the mod list."""
-        return self.mod_list_frame
+    def update_cf_sync_status(self, unique_id, status_key):
+        """Updates the CF Sync status icon in the table for a specific mod by unique_id."""
+        # Determine the icon based on the status key
+        icon = {
+            "default": self.icon_default,
+            "searching": self.icon_searching,
+            "found": self.icon_found,
+            "not_found": self.icon_not_found
+        }.get(status_key, self.icon_default)
 
-    def on_middle_click_scroll(self, event):
-        """Start scrolling with middle mouse button."""
-        self.scroll_start_x = event.x
-        self.scroll_start_y = event.y
-
-    def on_middle_drag_scroll(self, event):
-        """Handles middle mouse button dragging to scroll both horizontally and vertically."""
-        delta_x = event.x - self.scroll_start_x
-        delta_y = event.y - self.scroll_start_y
-
-        # Invert the direction of scrolling
-        self.tree.xview_scroll(int(delta_x / 2), "units")  # Inverted horizontal scrolling
-        self.tree.yview_scroll(int(delta_y / 2), "units")  # Inverted vertical scrolling
-
-        self.scroll_start_x = event.x
-        self.scroll_start_y = event.y
-
-    def on_enter_mod_list(self, event):
-        """Enable mouse wheel scrolling for this panel when the mouse is inside."""
-        self.tree.bind_all("<MouseWheel>", self.on_mouse_wheel)
-
-    def on_leave_mod_list(self, event):
-        """Disable mouse wheel scrolling for this panel when the mouse leaves."""
-        self.tree.unbind_all("<MouseWheel>")
-
-    def on_mouse_wheel(self, event):
-        """Handle mouse wheel scrolling."""
-        self.tree.yview_scroll(-1 * int(event.delta / 120), "units")
+        # Find the row with the matching unique_id and update its icon
+        for row in range(self.table.rowCount()):
+            if self.mod_info[row].get("unique_id") == unique_id:
+                self._set_icon_for_row(row, icon)
+                self.table.viewport().update()  # Force refresh
+                break
