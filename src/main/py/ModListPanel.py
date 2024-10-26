@@ -1,33 +1,34 @@
 # ModListPanel.py
 import tkinter as tk
 from tkinter import ttk, Scrollbar
-import os
-import json
 
 class ModListPanel:
-    def __init__(self, parent, on_mod_select, on_checkbox_click):
-        """Initializes the mod list section."""
+    def __init__(self, parent, on_mod_select, on_checkbox_click, icons):
+        """Initializes the mod list section with icons."""
         self.parent = parent
         self.on_mod_select = on_mod_select
         self.on_checkbox_click = on_checkbox_click
+        self.icons = icons  # Store the icons dictionary
 
         # Create the mod list frame
         self.mod_list_frame = tk.Frame(self.parent)
 
-        # Treeview to display mod list
-        self.tree = ttk.Treeview(self.mod_list_frame, columns=("Enabled", "Mod ID", "Mod Name", "Modloader", "Version"), show="headings")
+        # Treeview to display mod list with added CF Sync column
+        self.tree = ttk.Treeview(self.mod_list_frame, columns=("Enabled", "Mod ID", "Mod Name", "Modloader", "Version", "CF Sync"), show="headings")
         self.tree.heading("Enabled", text="Enabled")
         self.tree.heading("Mod ID", text="Mod ID")
         self.tree.heading("Mod Name", text="Mod Name")
         self.tree.heading("Modloader", text="Modloader")
         self.tree.heading("Version", text="Version")
+        self.tree.heading("CF Sync", text="CF Sync")  # New column for CurseForge Sync status
 
-        # Set fixed column widths and allow horizontal scrolling
-        self.tree.column("Enabled", width=65, stretch=True)
-        self.tree.column("Mod ID", width=150, stretch=True)
-        self.tree.column("Mod Name", width=250, stretch=True)
-        self.tree.column("Modloader", width=150, stretch=True)
-        self.tree.column("Version", width=100, stretch=True)
+        # Set fixed column widths
+        self.tree.column("Enabled", width=65)
+        self.tree.column("Mod ID", width=150)
+        self.tree.column("Mod Name", width=250)
+        self.tree.column("Modloader", width=150)
+        self.tree.column("Version", width=100)
+        self.tree.column("CF Sync", width=75)  # Column for CF Sync status
 
         self.tree.grid(row=0, column=0, sticky="nsew")
 
@@ -50,34 +51,22 @@ class ModListPanel:
         # Bind checkboxes to click events
         self.tree.bind("<Button-1>", self.on_checkbox_click)
 
-        # Bind the <<TreeviewSelect>> event to handle selection by arrow keys or any other method
-        self.tree.bind("<<TreeviewSelect>>", self.on_mod_select)
-
-        # Middle mouse button drag scrolling
-        self.tree.bind("<Button-2>", self.on_middle_click_scroll)
-        self.tree.bind("<B2-Motion>", self.on_middle_drag_scroll)
-
-        # Mouse wheel only on this panel
-        self.tree.bind("<Enter>", self.on_enter_mod_list)
-        self.tree.bind("<Leave>", self.on_leave_mod_list)
-
-        # Store mod info
-        self.mod_info = []  # Store loaded mods here
-
-        # Variables for tracking drag scrolling
-        self.scroll_start_x = 0
-        self.scroll_start_y = 0
+        # Dictionary to hold icon labels for each row
+        self.icon_labels = {}
 
     def populate_mod_list(self, mod_data):
         """Populates the mod list with the provided mod data."""
-        # Clear the table before populating it with new data
         for row in self.tree.get_children():
             self.tree.delete(row)
 
-        # Store the mod data
         self.mod_info = mod_data
 
-        # Populate the table with mod info
+        # Remove any existing labels
+        for label in self.icon_labels.values():
+            label.destroy()
+        self.icon_labels.clear()
+
+        # Add each mod to the Treeview and overlay an icon label
         for mod in self.mod_info:
             enabled = "☑" if mod.get("enabled", True) else "☐"
             mod_id = mod.get("id", "Unknown")
@@ -85,8 +74,42 @@ class ModListPanel:
             modloader = mod.get("modloader", "Unknown")
             version = mod.get("version", "Unknown")
 
-            # Insert mod data into the Treeview
-            self.tree.insert("", "end", values=(enabled, mod_id, mod_name, modloader, version))
+            # Insert each mod row and get its item ID
+            item_id = self.tree.insert("", "end", values=(enabled, mod_id, mod_name, modloader, version, ""))
+
+            # Call a function to position the default icon in the CF Sync column for this row
+            self._place_icon_for_row(item_id, "default")
+
+    def _place_icon_for_row(self, item_id, icon_key):
+        """Helper method to place an icon in the CF Sync column for a given row item."""
+        # Use bbox to get coordinates and dimensions of the CF Sync cell
+        bbox = self.tree.bbox(item_id, column="CF Sync")
+        if bbox:
+            x, y, width, height = bbox
+            icon = self.icons[icon_key]
+            # Center the icon within the cell
+            x_centered = x + (width - icon.width()) // 2
+            y_centered = y + (height - icon.height()) // 2
+
+            # Create the label if not exists, or update the image if it does
+            if item_id in self.icon_labels:
+                self.icon_labels[item_id].config(image=icon)
+                self.icon_labels[item_id].place(x=x_centered, y=y_centered)
+            else:
+                label = tk.Label(self.tree, image=icon, borderwidth=0)
+                label.place(x=x_centered, y=y_centered)
+                self.icon_labels[item_id] = label
+
+    def update_cf_sync_status(self, mod_id, status_key):
+        """Updates the CF Sync status icon for a specific mod."""
+        icon = self.icons.get(status_key, self.icons["default"])
+
+        # Find the row by mod_id and update the corresponding icon label
+        for item_id in self.tree.get_children():
+            values = self.tree.item(item_id, "values")
+            if values[1] == mod_id:  # Check if mod_id matches
+                self._place_icon_for_row(item_id, status_key)  # Update icon placement
+                break
 
     def toggle_mod(self, item):
         """Enables or disables a mod by renaming the file and updating mod_data.json."""
